@@ -34,7 +34,21 @@ export interface Peminjaman {
   jumlah: number;
   tanggalPinjam: string;
   tanggalKembali: string;
-  status: "Aktif" | "Selesai" | "Terlambat";
+  // "Menunggu Verifikasi"        = baru diajukan siswa, belum diproses admin.
+  // "Aktif"                      = sudah disetujui admin dan alat sedang dipinjam.
+  // "Ditolak"                    = pengajuan ditolak admin.
+  // "Menunggu Konfirmasi Kembali"= siswa sudah lapor kembalikan alat, admin belum konfirmasi.
+  // "Selesai"                    = alat sudah dikembalikan & dikonfirmasi admin.
+  // "Terlambat"                  = alat aktif tapi sudah lewat tanggal rencana kembali.
+  status:
+    | "Menunggu Verifikasi"
+    | "Aktif"
+    | "Ditolak"
+    | "Menunggu Konfirmasi Kembali"
+    | "Selesai"
+    | "Terlambat";
+  alasanTolak?: string;
+  fotoBukti?: string; // foto alat yang diupload siswa saat mengajukan pengembalian
 }
 
 export interface AlatMasuk {
@@ -78,6 +92,7 @@ export const initialPeminjaman: Peminjaman[] = [
   { id: "PJ002", peminjamId: "P002", alatId: "A005", jumlah: 1, tanggalPinjam: "2026-06-20", tanggalKembali: "2026-06-27", status: "Terlambat" },
   { id: "PJ003", peminjamId: "P003", alatId: "A004", jumlah: 2, tanggalPinjam: "2026-06-15", tanggalKembali: "2026-06-22", status: "Selesai" },
   { id: "PJ004", peminjamId: "P004", alatId: "A002", jumlah: 1, tanggalPinjam: "2026-07-01", tanggalKembali: "2026-07-08", status: "Aktif" },
+  { id: "PJ005", peminjamId: "P002", alatId: "A003", jumlah: 1, tanggalPinjam: "2026-07-04", tanggalKembali: "2026-07-11", status: "Menunggu Verifikasi" },
 ];
 
 export const initialAlatMasuk: AlatMasuk[] = [

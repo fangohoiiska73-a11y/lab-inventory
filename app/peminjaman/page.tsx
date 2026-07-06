@@ -1,8 +1,8 @@
 "use client";
-import { FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/home/Navbar";
-import CameraCapture from "@/components/CameraCapture";
+import Sidebar from "@/components/dashboard/Sidebar";
 import { initialAlat } from "@/lib/data";
 
 interface FormState {
@@ -40,71 +40,6 @@ const inputClass =
 const labelClass = "block text-sm text-slate-200 mb-1.5";
 const hintClass = "mt-1.5 text-xs text-slate-500";
 
-/* ----------------------------- Icon set ----------------------------- */
-
-function IconHome(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M4 11.5 12 4l8 7.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 20v-5h4v5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconClipboard(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <rect x="6" y="4" width="12" height="17" rx="2" />
-      <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" strokeLinecap="round" />
-      <path d="M9 11h6M9 15h6M9 19h3" strokeLinecap="round" />
-    </svg>
-  );
-}
-function IconHistory(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 4v5h5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 8v4l3 2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconBell(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" strokeLinecap="round" />
-    </svg>
-  );
-}
-function IconBook(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function IconPhone(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path
-        d="M5 4h3.2l1.4 4.5-2.1 1.5a12 12 0 0 0 5.5 5.5l1.5-2.1L19 15v3.2a1.8 1.8 0 0 1-2 1.8A15.8 15.8 0 0 1 3.2 6a1.8 1.8 0 0 1 1.8-2Z"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-function IconInfo(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 11v5" strokeLinecap="round" />
-      <path d="M12 8h.01" strokeLinecap="round" />
-    </svg>
-  );
-}
 function IconBack(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
@@ -113,96 +48,96 @@ function IconBack(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-function IconHeadset(props: React.SVGProps<SVGSVGElement>) {
+function IconUpload(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M4 13v-1a8 8 0 0 1 16 0v1" strokeLinecap="round" />
-      <rect x="3" y="13" width="4" height="6" rx="1.2" />
-      <rect x="17" y="13" width="4" height="6" rx="1.2" />
-      <path d="M19 19v1a2 2 0 0 1-2 2h-3" strokeLinecap="round" />
+      <path d="M12 16V4M12 4 7 9M12 4l5 5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconTrash(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-/* --------------------------- Sidebar layout -------------------------- */
+/* --------------------------- Upload Foto Bukti --------------------------- */
 
-function SidebarLink({
-  icon,
-  label,
-  active,
-  href,
+function UploadFotoBukti({
+  value,
+  onChange,
+  onClear,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  href: string;
+  value: string;
+  onChange: (dataUrl: string) => void;
+  onClear: () => void;
 }) {
-  return (
-    <Link
-      href={href}
-      className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm transition ${
-        active
-          ? "bg-emerald-500/12 text-emerald-400 font-medium"
-          : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-      }`}
-    >
-      <span className={`flex h-5 w-5 items-center justify-center ${active ? "text-emerald-400" : "text-slate-500"}`}>
-        {icon}
-      </span>
-      {label}
-    </Link>
-  );
-}
+  const [errorFile, setErrorFile] = useState("");
 
-function Sidebar() {
-  return (
-    <aside className="hidden lg:flex w-[260px] shrink-0 flex-col justify-between border-r border-white/10 bg-[#070a13] px-4 py-6">
-      <div>
-        <p className="px-3.5 mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-          Menu
-        </p>
-        <nav className="space-y-1">
-          <SidebarLink icon={<IconHome className="h-full w-full" />} label="Dashboard" href="/" />
-          <SidebarLink
-            icon={<IconClipboard className="h-full w-full" />}
-            label="Ajukan Peminjaman"
-            href="/peminjaman"
-            active
-          />
-          <SidebarLink
-            icon={<IconHistory className="h-full w-full" />}
-            label="Riwayat Peminjaman"
-            href="/pengembalian"
-          />
-          <SidebarLink icon={<IconBell className="h-full w-full" />} label="Notifikasi" href="#" />
-        </nav>
+  function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    setErrorFile("");
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-        <p className="px-3.5 mt-7 mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-          Lainnya
-        </p>
-        <nav className="space-y-1">
-          <SidebarLink icon={<IconBook className="h-full w-full" />} label="Panduan" href="#" />
-          <SidebarLink icon={<IconPhone className="h-full w-full" />} label="Kontak" href="#" />
-          <SidebarLink icon={<IconInfo className="h-full w-full" />} label="Tentang Lab" href="#" />
-        </nav>
-      </div>
+    if (!file.type.startsWith("image/")) {
+      setErrorFile("File harus berupa gambar (jpg, png, dll).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorFile("Ukuran foto maksimal 5MB.");
+      return;
+    }
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-          <IconHeadset className="h-5 w-5" />
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+        <img src={value} alt="Foto bukti" className="h-20 w-20 rounded-lg object-cover border border-white/10" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-slate-300">Foto berhasil diunggah.</p>
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition"
+          >
+            <IconTrash className="h-3.5 w-3.5" />
+            Hapus & ganti foto
+          </button>
         </div>
-        <p className="mt-3 text-sm font-medium text-slate-200">Butuh Bantuan?</p>
-        <p className="mt-1 text-xs text-slate-500">
-          Jika ada kendala atau pertanyaan, hubungi petugas laboratorium.
-        </p>
-        <button
-          type="button"
-          className="mt-3 w-full rounded-lg bg-emerald-500 hover:bg-emerald-600 transition py-2 text-xs font-semibold"
-        >
-          Hubungi Kami
-        </button>
       </div>
-    </aside>
+    );
+  }
+
+  return (
+    <div>
+      <label
+        htmlFor="foto-bukti-input"
+        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-8 text-center transition hover:border-emerald-400/40 hover:bg-white/[0.03]"
+      >
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
+          <IconUpload className="h-5 w-5" />
+        </span>
+        <span className="text-sm text-slate-300">
+          Klik untuk unggah foto <span className="text-emerald-400">atau tarik file ke sini</span>
+        </span>
+        <span className="text-xs text-slate-500">JPG, PNG, maks. 5MB</span>
+      </label>
+      <input
+        id="foto-bukti-input"
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        className="hidden"
+      />
+      {errorFile && <p className="mt-2 text-xs text-red-400">{errorFile}</p>}
+    </div>
   );
 }
 
@@ -247,7 +182,7 @@ export default function AjukanPeminjamanPage() {
       return;
     }
     if (!form.fotoBukti) {
-      setError("Foto bukti wajib diambil (wajah terlihat jelas sambil memegang alat) sebelum pengajuan bisa dikirim.");
+      setError("Foto bukti wajib diunggah sebelum pengajuan bisa dikirim.");
       return;
     }
 
@@ -286,7 +221,7 @@ export default function AjukanPeminjamanPage() {
                 <img
                   src={sukses.fotoBukti}
                   alt="Foto bukti"
-                  className="mt-5 w-28 h-28 object-cover rounded-xl border border-emerald-400/30 mx-auto -scale-x-100"
+                  className="mt-5 w-28 h-28 object-cover rounded-xl border border-emerald-400/30 mx-auto"
                 />
               )}
 
@@ -319,7 +254,7 @@ export default function AjukanPeminjamanPage() {
           ) : (
             <>
               <Link
-                href="/"
+                href="/dashboard"
                 className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-emerald-400 transition"
               >
                 <IconBack className="h-4 w-4" />
@@ -466,14 +401,12 @@ export default function AjukanPeminjamanPage() {
                     Foto Bukti Peminjaman
                   </h2>
                   <p className="text-xs text-slate-500 mb-4">
-                    Wajib: foto wajah kamu dengan jelas sambil memegang alat yang dipinjam. Foto harus diambil
-                    langsung dari kamera saat ini (tidak bisa unggah dari galeri).
+                    Unggah foto sebagai bukti pengambilan alat (misalnya foto alat atau foto kamu bersama alat).
                   </p>
-                  <CameraCapture
+                  <UploadFotoBukti
                     value={form.fotoBukti}
-                    onCapture={(dataUrl) => setForm({ ...form, fotoBukti: dataUrl })}
+                    onChange={(dataUrl) => setForm({ ...form, fotoBukti: dataUrl })}
                     onClear={() => setForm({ ...form, fotoBukti: "" })}
-                    label="Foto sambil memegang alat"
                   />
                 </div>
 

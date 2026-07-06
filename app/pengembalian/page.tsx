@@ -1,8 +1,7 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/home/Navbar";
-import CameraCapture from "@/components/CameraCapture";
 
 interface FormState {
   nama: string;
@@ -30,6 +29,99 @@ const inputClass =
   "w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30";
 const labelClass = "block text-sm text-slate-200 mb-1.5";
 
+function IconUpload(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M12 16V4M12 4 7 9M12 4l5 5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconTrash(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* --------------------------- Upload Foto Bukti --------------------------- */
+
+function UploadFotoBukti({
+  value,
+  onChange,
+  onClear,
+}: {
+  value: string;
+  onChange: (dataUrl: string) => void;
+  onClear: () => void;
+}) {
+  const [errorFile, setErrorFile] = useState("");
+
+  function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    setErrorFile("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setErrorFile("File harus berupa gambar (jpg, png, dll).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorFile("Ukuran foto maksimal 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+        <img src={value} alt="Foto bukti" className="h-20 w-20 rounded-lg object-cover border border-white/10" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-slate-300">Foto berhasil diunggah.</p>
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition"
+          >
+            <IconTrash className="h-3.5 w-3.5" />
+            Hapus & ganti foto
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label
+        htmlFor="foto-bukti-pengembalian-input"
+        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-8 text-center transition hover:border-sky-400/40 hover:bg-white/[0.03]"
+      >
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/15 text-sky-400">
+          <IconUpload className="h-5 w-5" />
+        </span>
+        <span className="text-sm text-slate-300">
+          Klik untuk unggah foto <span className="text-sky-400">atau tarik file ke sini</span>
+        </span>
+        <span className="text-xs text-slate-500">JPG, PNG, maks. 5MB</span>
+      </label>
+      <input
+        id="foto-bukti-pengembalian-input"
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        className="hidden"
+      />
+      {errorFile && <p className="mt-2 text-xs text-red-400">{errorFile}</p>}
+    </div>
+  );
+}
+
 export default function FormPengembalianPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState("");
@@ -48,7 +140,7 @@ export default function FormPengembalianPage() {
       return;
     }
     if (!form.fotoBukti) {
-      setError("Foto bukti wajib diambil (wajah terlihat jelas sambil memegang alat yang dikembalikan) sebelum form bisa dikirim.");
+      setError("Foto bukti wajib diunggah sebelum form bisa dikirim.");
       return;
     }
     if (form.kondisiKembali !== "Baik" && !form.catatan.trim()) {
@@ -105,7 +197,7 @@ export default function FormPengembalianPage() {
               <img
                 src={sukses.fotoBukti}
                 alt="Foto bukti pengembalian"
-                className="mt-5 w-28 h-28 object-cover rounded-xl border border-sky-400/30 mx-auto -scale-x-100"
+                className="mt-5 w-28 h-28 object-cover rounded-xl border border-sky-400/30 mx-auto"
               />
             )}
 
@@ -218,13 +310,12 @@ export default function FormPengembalianPage() {
                 Foto Bukti Pengembalian
               </h2>
               <p className="text-xs text-slate-500 mb-4">
-                Wajib: foto wajah kamu dengan jelas sambil memegang alat yang dikembalikan. Foto harus diambil langsung dari kamera saat ini.
+                Unggah foto sebagai bukti pengembalian alat (misalnya foto kondisi alat saat dikembalikan).
               </p>
-              <CameraCapture
+              <UploadFotoBukti
                 value={form.fotoBukti}
-                onCapture={(dataUrl) => setForm({ ...form, fotoBukti: dataUrl })}
+                onChange={(dataUrl) => setForm({ ...form, fotoBukti: dataUrl })}
                 onClear={() => setForm({ ...form, fotoBukti: "" })}
-                label="Foto sambil memegang alat yang dikembalikan"
               />
             </div>
 

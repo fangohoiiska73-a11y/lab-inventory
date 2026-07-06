@@ -22,6 +22,15 @@ function IconClipboard(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+function IconRotate(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M4 4v5h5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20 20v-5h-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 15a8 8 0 0 0 14.3 3M19 9A8 8 0 0 0 4.7 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function IconHistory(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
@@ -90,6 +99,7 @@ type MenuItem = {
 const MENU_ITEMS: MenuItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: IconHome },
   { href: "/peminjaman", label: "Ajukan Peminjaman", icon: IconClipboard },
+  { href: "/pengembalian", label: "Ajukan Pengembalian", icon: IconRotate },
   { href: "/riwayat-peminjaman", label: "Riwayat Peminjaman", icon: IconHistory },
   { href: "/notifikasi", label: "Notifikasi", icon: IconBell, badge: 2 },
 ];

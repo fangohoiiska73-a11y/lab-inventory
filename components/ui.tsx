@@ -10,6 +10,9 @@ const BADGE_STYLES: Record<string, string> = {
   Aktif: "bg-sky-500/15 text-sky-400",
   Selesai: "bg-emerald-500/15 text-emerald-400",
   Terlambat: "bg-red-500/15 text-red-400",
+  "Menunggu Verifikasi": "bg-amber-500/15 text-amber-400",
+  "Menunggu Konfirmasi Kembali": "bg-violet-500/15 text-violet-400",
+  Ditolak: "bg-rose-500/15 text-rose-400",
   default: "bg-slate-500/15 text-slate-300",
 };
 

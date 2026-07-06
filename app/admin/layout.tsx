@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
+import { PeminjamanProvider, usePeminjaman } from "@/lib/peminjaman/context";
 
 const MENU = [
   { label: "Dashboard", icon: "grid", href: "/admin/dashboard" },
@@ -15,10 +16,24 @@ const MENU = [
   { label: "Ganti Password", icon: "key", href: "/admin/ganti-password" },
 ];
 
+// Provider dipasang di sini (paling luar), supaya SEMUA halaman di dalam
+// /admin/* (Sidebar, Dashboard, Peminjaman, dll) berbagi data yang sama.
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <PeminjamanProvider>
+      <AdminShell>{children}</AdminShell>
+    </PeminjamanProvider>
+  );
+}
+
+function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Ini sekarang baca dari Context -> otomatis update kalau status
+  // pengajuan pinjam ATAU laporan pengembalian berubah, tidak akan "nyangkut" lagi.
+  const { perluDiproses } = usePeminjaman();
 
   const activeItem = MENU.find((item) => pathname?.startsWith(item.href));
 
@@ -45,6 +60,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex-1 overflow-y-auto py-4">
           {MENU.map((item) => {
             const isActive = activeItem?.href === item.href;
+            const badgeCount = item.label === "Peminjaman" ? perluDiproses : 0;
+
             return (
               <Link
                 key={item.label}
@@ -57,7 +74,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 }`}
               >
                 <Icon name={item.icon} className="w-5 h-5" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-rose-500 text-white text-[11px] font-semibold">
+                    {badgeCount}
+                  </span>
+                )}
               </Link>
             );
           })}
