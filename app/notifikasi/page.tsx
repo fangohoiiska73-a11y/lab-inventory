@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Navbar from "@/components/home/Navbar";
-import Sidebar from "@/components/dashboard/sidebar";
+import Sidebar from "@/components/dashboard/Sidebar";
 
 /* ------------------------------- Icon set -------------------------------- */
 

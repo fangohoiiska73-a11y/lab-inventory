@@ -1,5 +1,5 @@
 import Navbar from "@/components/home/Navbar";
-import Sidebar from "@/components/dashboard/sidebar";
+import Sidebar from "@/components/dashboard/Sidebar";
 
 const LANGKAH = [
   {

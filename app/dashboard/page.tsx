@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import Navbar from "@/components/home/Navbar";
-import Sidebar from "@/components/dashboard/sidebar";
+import Sidebar from "@/components/dashboard/Sidebar";
 import { initialAlat } from "@/lib/data";
 
 /* ------------------------------- Icon set -------------------------------- */
