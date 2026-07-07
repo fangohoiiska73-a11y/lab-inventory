@@ -2,28 +2,14 @@
 import { ChangeEvent, FormEvent, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/home/Navbar";
+import { Alat, Peminjaman, findAlat } from "@/lib/data";
+import { fetchAlatList, fetchPeminjamanByNoInduk, ajukanKembaliPeminjaman } from "@/lib/queries";
 
-interface FormState {
-  nama: string;
-  noInduk: string;
-  namaAlat: string;
-  kondisiKembali: "Baik" | "Rusak Ringan" | "Rusak Berat";
-  catatan: string;
-  fotoBukti: string;
-}
+type Kondisi = "Baik" | "Rusak Ringan" | "Rusak Berat";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
-
-const EMPTY_FORM: FormState = {
-  nama: "",
-  noInduk: "",
-  namaAlat: "",
-  kondisiKembali: "Baik",
-  catatan: "",
-  fotoBukti: "",
-};
 
 const inputClass =
   "w-full bg-white/5 border border-white/10 rounded-lg px-3.5 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30";
@@ -122,41 +108,112 @@ function UploadFotoBukti({
   );
 }
 
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-white font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
 export default function FormPengembalianPage() {
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [error, setError] = useState("");
-  const [sukses, setSukses] = useState<FormState | null>(null);
+  // ---- Tahap 1: cari peminjaman aktif berdasarkan No Induk ----
+  const [noInduk, setNoInduk] = useState("");
+  const [mencari, setMencari] = useState(false);
+  const [errorCari, setErrorCari] = useState("");
+  const [daftarAktif, setDaftarAktif] = useState<Peminjaman[] | null>(null);
+  const [alatList, setAlatList] = useState<Alat[]>([]);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  // ---- Tahap 2: pilih peminjaman + isi detail pengembalian ----
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [kondisiKembali, setKondisiKembali] = useState<Kondisi>("Baik");
+  const [catatan, setCatatan] = useState("");
+  const [fotoBukti, setFotoBukti] = useState("");
+  const [errorSubmit, setErrorSubmit] = useState("");
+  const [mengirim, setMengirim] = useState(false);
+
+  const [sukses, setSukses] = useState<{
+    alatNama: string;
+    kondisi: Kondisi;
+    catatan: string;
+    fotoBukti: string;
+  } | null>(null);
+
+  async function handleCari(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
+    setErrorCari("");
+    setDaftarAktif(null);
+    setSelectedId("");
 
-    if (!form.nama.trim() || !form.noInduk.trim()) {
-      setError("Nama dan No Induk wajib diisi.");
-      return;
-    }
-    if (!form.namaAlat.trim()) {
-      setError("Nama alat yang dikembalikan wajib diisi.");
-      return;
-    }
-    if (!form.fotoBukti) {
-      setError("Foto bukti wajib diunggah sebelum form bisa dikirim.");
-      return;
-    }
-    if (form.kondisiKembali !== "Baik" && !form.catatan.trim()) {
-      setError("Karena kondisi alat tidak baik, mohon isi catatan/keterangan kerusakannya.");
+    if (!noInduk.trim()) {
+      setErrorCari("No Induk wajib diisi.");
       return;
     }
 
-    // TODO: sambungkan ke backend/API supaya data pengembalian (termasuk fotoBukti)
-    // tersimpan dan tersinkron dengan status peminjaman yang bersangkutan di admin.
-    setSukses(form);
+    setMencari(true);
+    try {
+      const [semua, alat] = await Promise.all([fetchPeminjamanByNoInduk(noInduk.trim()), fetchAlatList()]);
+      setAlatList(alat);
+
+      const aktif = semua.filter((p) => p.status === "Aktif" || p.status === "Terlambat");
+      if (aktif.length === 0) {
+        setErrorCari("Tidak ada peminjaman aktif ditemukan untuk No Induk ini. Pastikan No Induk sudah benar.");
+      }
+      setDaftarAktif(aktif);
+    } catch (err: any) {
+      setErrorCari(err.message ?? "Gagal mengambil data peminjaman.");
+    } finally {
+      setMencari(false);
+    }
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setErrorSubmit("");
+
+    if (!selectedId) {
+      setErrorSubmit("Pilih dulu alat mana yang mau dikembalikan.");
+      return;
+    }
+    if (!fotoBukti) {
+      setErrorSubmit("Foto bukti wajib diunggah sebelum form bisa dikirim.");
+      return;
+    }
+    if (kondisiKembali !== "Baik" && !catatan.trim()) {
+      setErrorSubmit("Karena kondisi alat tidak baik, mohon isi catatan/keterangan kerusakannya.");
+      return;
+    }
+
+    const item = daftarAktif?.find((p) => p.id === selectedId);
+    const alat = item ? findAlat(alatList, item.alatId) : undefined;
+
+    setMengirim(true);
+    try {
+      await ajukanKembaliPeminjaman(selectedId, fotoBukti);
+      setSukses({
+        alatNama: alat?.nama ?? "-",
+        kondisi: kondisiKembali,
+        catatan,
+        fotoBukti,
+      });
+    } catch (err: any) {
+      setErrorSubmit(err.message ?? "Gagal mengirim laporan pengembalian. Coba lagi.");
+    } finally {
+      setMengirim(false);
+    }
   }
 
   function handleReset() {
     setSukses(null);
-    setForm(EMPTY_FORM);
-    setError("");
+    setNoInduk("");
+    setDaftarAktif(null);
+    setSelectedId("");
+    setKondisiKembali("Baik");
+    setCatatan("");
+    setFotoBukti("");
+    setErrorCari("");
+    setErrorSubmit("");
   }
 
   return (
@@ -202,10 +259,8 @@ export default function FormPengembalianPage() {
             )}
 
             <div className="mt-6 space-y-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-5 text-left text-sm">
-              <Row label="Nama" value={sukses.nama} />
-              <Row label="No Induk" value={sukses.noInduk} />
-              <Row label="Alat Dikembalikan" value={sukses.namaAlat} />
-              <Row label="Kondisi" value={sukses.kondisiKembali} />
+              <Row label="Alat Dikembalikan" value={sukses.alatNama} />
+              <Row label="Kondisi" value={sukses.kondisi} />
               <Row label="Tanggal Kembali" value={todayISO()} />
               {sukses.catatan && <Row label="Catatan" value={sukses.catatan} />}
             </div>
@@ -226,123 +281,142 @@ export default function FormPengembalianPage() {
             </div>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 backdrop-blur-md"
-          >
-            <div>
-              <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide mb-4">
-                Data Peminjam
-              </h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Nama Lengkap</label>
-                  <input
-                    className={inputClass}
-                    value={form.nama}
-                    onChange={(e) => setForm({ ...form, nama: e.target.value })}
-                    placeholder="Ahmad Fauzan"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>No Induk / NIM</label>
-                  <input
-                    className={inputClass}
-                    value={form.noInduk}
-                    onChange={(e) => setForm({ ...form, noInduk: e.target.value })}
-                    placeholder="2024101"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 pt-5">
-              <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide mb-4">
-                Detail Alat Dikembalikan
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className={labelClass}>Nama Alat</label>
-                  <input
-                    className={inputClass}
-                    value={form.namaAlat}
-                    onChange={(e) => setForm({ ...form, namaAlat: e.target.value })}
-                    placeholder="Router Mikrotik RB941"
-                    required
-                  />
-                  <p className="mt-1 text-xs text-slate-500">
-                    Isi sesuai nama alat yang tertera pada bukti pengajuan peminjaman kamu.
-                  </p>
-                </div>
-
-                <div>
-                  <label className={labelClass}>Kondisi Alat Saat Dikembalikan</label>
-                  <select
-                    className={inputClass}
-                    value={form.kondisiKembali}
-                    onChange={(e) => setForm({ ...form, kondisiKembali: e.target.value as FormState["kondisiKembali"] })}
-                  >
-                    <option value="Baik">Baik</option>
-                    <option value="Rusak Ringan">Rusak Ringan</option>
-                    <option value="Rusak Berat">Rusak Berat</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className={labelClass}>
-                    Catatan {form.kondisiKembali !== "Baik" && <span className="text-red-400">*wajib diisi</span>}
-                  </label>
-                  <textarea
-                    className={inputClass}
-                    rows={3}
-                    value={form.catatan}
-                    onChange={(e) => setForm({ ...form, catatan: e.target.value })}
-                    placeholder="Contoh: layar retak sedikit di pojok kanan atas"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 pt-5">
-              <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide mb-1">
-                Foto Bukti Pengembalian
-              </h2>
-              <p className="text-xs text-slate-500 mb-4">
-                Unggah foto sebagai bukti pengembalian alat (misalnya foto kondisi alat saat dikembalikan).
-              </p>
-              <UploadFotoBukti
-                value={form.fotoBukti}
-                onChange={(dataUrl) => setForm({ ...form, fotoBukti: dataUrl })}
-                onClear={() => setForm({ ...form, fotoBukti: "" })}
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-sky-500 hover:bg-sky-600 transition py-3 text-sm font-semibold text-[#05070f] shadow-lg shadow-sky-500/15"
+          <div className="space-y-5">
+            {/* ---------------- Tahap 1: cari No Induk ---------------- */}
+            <form
+              onSubmit={handleCari}
+              className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 backdrop-blur-md"
             >
-              Kirim Pengembalian →
-            </button>
-          </form>
+              <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide">
+                Cari Peminjaman Kamu
+              </h2>
+              <div>
+                <label className={labelClass}>No Induk / NIM</label>
+                <input
+                  className={inputClass}
+                  value={noInduk}
+                  onChange={(e) => setNoInduk(e.target.value)}
+                  placeholder="2024101"
+                  required
+                />
+              </div>
+              {errorCari && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+                  {errorCari}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={mencari}
+                className="w-full rounded-lg bg-sky-500 hover:bg-sky-600 transition py-3 text-sm font-semibold text-[#05070f] shadow-lg shadow-sky-500/15 disabled:opacity-50"
+              >
+                {mencari ? "Mencari..." : "Cari Peminjaman Aktif"}
+              </button>
+            </form>
+
+            {/* ---------------- Tahap 2: pilih alat + isi detail ---------------- */}
+            {daftarAktif && daftarAktif.length > 0 && (
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 backdrop-blur-md"
+              >
+                <div>
+                  <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide mb-4">
+                    Pilih Alat yang Dikembalikan
+                  </h2>
+                  <div className="space-y-2">
+                    {daftarAktif.map((item) => {
+                      const alat = findAlat(alatList, item.alatId);
+                      const active = selectedId === item.id;
+                      return (
+                        <label
+                          key={item.id}
+                          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 cursor-pointer transition ${
+                            active
+                              ? "border-sky-400 bg-sky-500/10"
+                              : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                          }`}
+                        >
+                          <div>
+                            <p className="text-sm text-white font-medium">{alat?.nama ?? "-"}</p>
+                            <p className="text-xs text-slate-500">
+                              Jumlah {item.jumlah} · Pinjam {item.tanggalPinjam} · Rencana kembali{" "}
+                              {item.tanggalKembali}
+                            </p>
+                          </div>
+                          <input
+                            type="radio"
+                            name="pilih-peminjaman"
+                            checked={active}
+                            onChange={() => setSelectedId(item.id)}
+                            className="h-4 w-4 accent-sky-500"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="border-t border-white/10 pt-5 space-y-4">
+                  <div>
+                    <label className={labelClass}>Kondisi Alat Saat Dikembalikan</label>
+                    <select
+                      className={inputClass}
+                      value={kondisiKembali}
+                      onChange={(e) => setKondisiKembali(e.target.value as Kondisi)}
+                    >
+                      <option value="Baik">Baik</option>
+                      <option value="Rusak Ringan">Rusak Ringan</option>
+                      <option value="Rusak Berat">Rusak Berat</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>
+                      Catatan {kondisiKembali !== "Baik" && <span className="text-red-400">*wajib diisi</span>}
+                    </label>
+                    <textarea
+                      className={inputClass}
+                      rows={3}
+                      value={catatan}
+                      onChange={(e) => setCatatan(e.target.value)}
+                      placeholder="Contoh: layar retak sedikit di pojok kanan atas"
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-white/10 pt-5">
+                  <h2 className="text-sm font-semibold text-sky-400 uppercase tracking-wide mb-1">
+                    Foto Bukti Pengembalian
+                  </h2>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Unggah foto sebagai bukti pengembalian alat (misalnya foto kondisi alat saat dikembalikan).
+                  </p>
+                  <UploadFotoBukti
+                    value={fotoBukti}
+                    onChange={setFotoBukti}
+                    onClear={() => setFotoBukti("")}
+                  />
+                </div>
+
+                {errorSubmit && (
+                  <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+                    {errorSubmit}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={mengirim}
+                  className="w-full rounded-lg bg-sky-500 hover:bg-sky-600 transition py-3 text-sm font-semibold text-[#05070f] shadow-lg shadow-sky-500/15 disabled:opacity-50"
+                >
+                  {mengirim ? "Mengirim..." : "Kirim Pengembalian →"}
+                </button>
+              </form>
+            )}
+          </div>
         )}
       </section>
     </main>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-white font-medium text-right">{value}</span>
-    </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/lib/icons";
-import { KATEGORI_ALAT, findAlat, findPeminjam, initialAlat, initialAlatKeluar, initialAlatMasuk, initialPeminjam, initialPeminjaman } from "@/lib/data";
+import { Alat, AlatKeluar, AlatMasuk, KATEGORI_ALAT, Peminjam, Peminjaman, findAlat, findPeminjam } from "@/lib/data";
+import { fetchAlatList, fetchAllAlatKeluar, fetchAllAlatMasuk, fetchAllPeminjam, fetchAllPeminjaman } from "@/lib/queries";
 import { Badge, PrimaryButton, Toolbar } from "@/components/ui";
 
 type Tab = "Ringkasan" | "Peminjaman" | "Alat Masuk" | "Alat Keluar";
@@ -10,10 +11,34 @@ const TABS: Tab[] = ["Ringkasan", "Peminjaman", "Alat Masuk", "Alat Keluar"];
 export default function LaporanPage() {
   const [tab, setTab] = useState<Tab>("Ringkasan");
 
+  const [alatList, setAlatList] = useState<Alat[]>([]);
+  const [peminjamanList, setPeminjamanList] = useState<Peminjaman[]>([]);
+  const [peminjamList, setPeminjamList] = useState<Peminjam[]>([]);
+  const [alatMasukList, setAlatMasukList] = useState<AlatMasuk[]>([]);
+  const [alatKeluarList, setAlatKeluarList] = useState<AlatKeluar[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    Promise.all([fetchAlatList(), fetchAllPeminjaman(), fetchAllPeminjam(), fetchAllAlatMasuk(), fetchAllAlatKeluar()])
+      .then(([alat, peminjaman, peminjam, masuk, keluar]) => {
+        setAlatList(alat);
+        setPeminjamanList(peminjaman);
+        setPeminjamList(peminjam);
+        setAlatMasukList(masuk);
+        setAlatKeluarList(keluar);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoadError("Gagal memuat data laporan.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
   const perKategori = useMemo(
     () =>
       KATEGORI_ALAT.map((kat) => {
-        const items = initialAlat.filter((a) => a.kategori === kat);
+        const items = alatList.filter((a) => a.kategori === kat);
         return {
           kategori: kat,
           jumlahAlat: items.length,
@@ -21,24 +46,40 @@ export default function LaporanPage() {
           tersedia: items.reduce((s, a) => s + a.tersedia, 0),
         };
       }).filter((k) => k.jumlahAlat > 0),
-    []
+    [alatList]
   );
 
   function exportCSV() {
     let rows: string[] = [];
     if (tab === "Ringkasan") {
-      rows = ["Kategori,Jumlah Jenis Alat,Total Unit,Tersedia", ...perKategori.map((k) => `${k.kategori},${k.jumlahAlat},${k.totalUnit},${k.tersedia}`)];
+      rows = [
+        "Kategori,Jumlah Jenis Alat,Total Unit,Tersedia",
+        ...perKategori.map((k) => `${k.kategori},${k.jumlahAlat},${k.totalUnit},${k.tersedia}`),
+      ];
     } else if (tab === "Peminjaman") {
       rows = [
         "Peminjam,Alat,Jumlah,Tanggal Pinjam,Tanggal Kembali,Status",
-        ...initialPeminjaman.map((p) =>
-          [findPeminjam(initialPeminjam, p.peminjamId)?.nama, findAlat(initialAlat, p.alatId)?.nama, p.jumlah, p.tanggalPinjam, p.tanggalKembali, p.status].join(",")
+        ...peminjamanList.map((p) =>
+          [
+            findPeminjam(peminjamList, p.peminjamId)?.nama,
+            findAlat(alatList, p.alatId)?.nama,
+            p.jumlah,
+            p.tanggalPinjam,
+            p.tanggalKembali,
+            p.status,
+          ].join(",")
         ),
       ];
     } else if (tab === "Alat Masuk") {
-      rows = ["Tanggal,Alat,Jumlah,Sumber", ...initialAlatMasuk.map((m) => [m.tanggal, findAlat(initialAlat, m.alatId)?.nama, m.jumlah, m.sumber].join(","))];
+      rows = [
+        "Tanggal,Alat,Jumlah,Sumber",
+        ...alatMasukList.map((m) => [m.tanggal, findAlat(alatList, m.alatId)?.nama, m.jumlah, m.sumber].join(",")),
+      ];
     } else {
-      rows = ["Tanggal,Alat,Jumlah,Tujuan", ...initialAlatKeluar.map((k) => [k.tanggal, findAlat(initialAlat, k.alatId)?.nama, k.jumlah, k.tujuan].join(","))];
+      rows = [
+        "Tanggal,Alat,Jumlah,Tujuan",
+        ...alatKeluarList.map((k) => [k.tanggal, findAlat(alatList, k.alatId)?.nama, k.jumlah, k.tujuan].join(",")),
+      ];
     }
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -49,8 +90,18 @@ export default function LaporanPage() {
     URL.revokeObjectURL(url);
   }
 
+  if (loading) {
+    return <p className="text-slate-400 text-sm">Memuat data laporan...</p>;
+  }
+
   return (
     <>
+      {loadError && (
+        <p className="mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+          {loadError}
+        </p>
+      )}
+
       <Toolbar
         subtitle="Ringkasan data inventaris dan transaksi"
         action={
@@ -114,10 +165,10 @@ export default function LaporanPage() {
               </tr>
             </thead>
             <tbody>
-              {initialPeminjaman.map((p) => (
+              {peminjamanList.map((p) => (
                 <tr key={p.id} className="border-b border-white/5">
-                  <td className="px-5 py-3.5 text-white font-medium">{findPeminjam(initialPeminjam, p.peminjamId)?.nama}</td>
-                  <td className="px-5 py-3.5 text-slate-300">{findAlat(initialAlat, p.alatId)?.nama}</td>
+                  <td className="px-5 py-3.5 text-white font-medium">{findPeminjam(peminjamList, p.peminjamId)?.nama}</td>
+                  <td className="px-5 py-3.5 text-slate-300">{findAlat(alatList, p.alatId)?.nama}</td>
                   <td className="px-5 py-3.5 text-slate-400">{p.tanggalPinjam}</td>
                   <td className="px-5 py-3.5 text-slate-400">{p.tanggalKembali}</td>
                   <td className="px-5 py-3.5"><Badge text={p.status} /></td>
@@ -140,10 +191,10 @@ export default function LaporanPage() {
               </tr>
             </thead>
             <tbody>
-              {initialAlatMasuk.map((m) => (
+              {alatMasukList.map((m) => (
                 <tr key={m.id} className="border-b border-white/5">
                   <td className="px-5 py-3.5 text-slate-400">{m.tanggal}</td>
-                  <td className="px-5 py-3.5 text-white font-medium">{findAlat(initialAlat, m.alatId)?.nama}</td>
+                  <td className="px-5 py-3.5 text-white font-medium">{findAlat(alatList, m.alatId)?.nama}</td>
                   <td className="px-5 py-3.5 text-emerald-400 font-semibold">+{m.jumlah}</td>
                   <td className="px-5 py-3.5 text-slate-300">{m.sumber}</td>
                 </tr>
@@ -165,10 +216,10 @@ export default function LaporanPage() {
               </tr>
             </thead>
             <tbody>
-              {initialAlatKeluar.map((k) => (
+              {alatKeluarList.map((k) => (
                 <tr key={k.id} className="border-b border-white/5">
                   <td className="px-5 py-3.5 text-slate-400">{k.tanggal}</td>
-                  <td className="px-5 py-3.5 text-white font-medium">{findAlat(initialAlat, k.alatId)?.nama}</td>
+                  <td className="px-5 py-3.5 text-white font-medium">{findAlat(alatList, k.alatId)?.nama}</td>
                   <td className="px-5 py-3.5 text-rose-400 font-semibold">-{k.jumlah}</td>
                   <td className="px-5 py-3.5 text-slate-300">{k.tujuan}</td>
                 </tr>

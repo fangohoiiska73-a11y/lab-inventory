@@ -3,7 +3,8 @@
 // HALAMAN ADMIN: PEMINJAMAN
 // ----------------------------------------------------------------------------
 // Data & aksi (setujui/tolak/selesai/hapus/tambah) datang dari
-// usePeminjaman() -- Context bersama di lib/peminjaman/context.tsx.
+// usePeminjaman() -- Context bersama di lib/peminjaman/context.tsx, yang
+// sekarang baca/tulis langsung ke Supabase.
 //
 // ALUR PENGEMBALIAN:
 //   Aktif / Terlambat
@@ -14,13 +15,21 @@
 //     -> kalau ternyata belum benar dikembalikan, admin klik "Belum Kembali"
 //        -> status balik ke Aktif
 //
+// CATATAN PENTING soal foto bukti:
+//   foto_bukti disimpan sebagai data: URL (base64) langsung di kolom teks.
+//   Chrome (dan browser Chromium lain) MEMBLOKIR navigasi tab baru langsung
+//   ke data: URL lewat <a target="_blank"> (untuk mencegah phishing), jadi
+//   dulu klik "Lihat foto bukti" cuma buka tab kosong (about:blank).
+//   Sekarang fotonya ditampilkan lewat MODAL di dalam halaman ini saja,
+//   tidak lewat tab baru, supaya tidak kena blokir tsb.
+//
 // TAMPILAN:
 //   - Layar >= md (desktop/tablet): tabel biasa, semua kolom kelihatan.
 //   - Layar < md (HP): daftar card, satu transaksi = satu card, supaya
 //     tidak perlu scroll horizontal dan status/foto bukti selalu kelihatan.
 // ============================================================================
 import { useMemo, useState } from "react";
-import { Peminjaman, initialPeminjam, findAlat, findPeminjam } from "@/lib/data";
+import { Peminjaman, findAlat, findPeminjam } from "@/lib/data";
 import { usePeminjaman } from "@/lib/peminjaman/context";
 import {
   Badge,
@@ -45,8 +54,18 @@ const STATUS_FILTERS = [
 ] as const;
 
 export default function PeminjamanPage() {
-  const { alatList, peminjamanList, setujui, tolak, konfirmasiKembali, tolakKembalikan, hapus } =
-    usePeminjaman();
+  const {
+    alatList,
+    peminjamList,
+    peminjamanList,
+    loading,
+    error,
+    setujui,
+    tolak,
+    konfirmasiKembali,
+    tolakKembalikan,
+    hapus,
+  } = usePeminjaman();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("Semua");
@@ -55,9 +74,16 @@ export default function PeminjamanPage() {
   const [alasanTolak, setAlasanTolak] = useState("");
   const [hapusTarget, setHapusTarget] = useState<string | null>(null);
 
+  // URL foto bukti yang lagi dipreview di modal (null = modal tertutup)
+  const [previewFoto, setPreviewFoto] = useState<string | null>(null);
+
+  // Set loading per-baris supaya tombol yang lagi diklik nonaktif dulu,
+  // mencegah klik ganda sambil menunggu Supabase merespons.
+  const [aksiLoadingId, setAksiLoadingId] = useState<string | null>(null);
+
   const filtered = useMemo(() => {
     return peminjamanList.filter((p: Peminjaman) => {
-      const peminjam = findPeminjam(initialPeminjam, p.peminjamId);
+      const peminjam = findPeminjam(peminjamList, p.peminjamId);
       const alat = findAlat(alatList, p.alatId);
       const cocokCari =
         !search ||
@@ -66,36 +92,87 @@ export default function PeminjamanPage() {
       const cocokStatus = statusFilter === "Semua" || p.status === statusFilter;
       return cocokCari && cocokStatus;
     });
-  }, [peminjamanList, alatList, search, statusFilter]);
+  }, [peminjamanList, peminjamList, alatList, search, statusFilter]);
 
-  function submitTolak() {
+  async function submitTolak() {
     if (!tolakTarget || !alasanTolak.trim()) return;
-    tolak(tolakTarget, alasanTolak);
-    setTolakTarget(null);
-    setAlasanTolak("");
+    setAksiLoadingId(tolakTarget);
+    try {
+      await tolak(tolakTarget, alasanTolak);
+      setTolakTarget(null);
+      setAlasanTolak("");
+    } catch (err: any) {
+      alert(err.message ?? "Gagal menolak pengajuan.");
+    } finally {
+      setAksiLoadingId(null);
+    }
   }
 
-  function submitHapus() {
+  async function submitHapus() {
     if (!hapusTarget) return;
-    hapus(hapusTarget);
-    setHapusTarget(null);
+    setAksiLoadingId(hapusTarget);
+    try {
+      await hapus(hapusTarget);
+      setHapusTarget(null);
+    } catch (err: any) {
+      alert(err.message ?? "Gagal menghapus transaksi.");
+    } finally {
+      setAksiLoadingId(null);
+    }
+  }
+
+  async function handleSetujui(item: Peminjaman) {
+    setAksiLoadingId(item.id);
+    try {
+      await setujui(item);
+    } catch (err: any) {
+      alert(err.message ?? "Gagal menyetujui pengajuan.");
+    } finally {
+      setAksiLoadingId(null);
+    }
+  }
+
+  async function handleKonfirmasiKembali(item: Peminjaman) {
+    setAksiLoadingId(item.id);
+    try {
+      await konfirmasiKembali(item);
+    } catch (err: any) {
+      alert(err.message ?? "Gagal mengonfirmasi pengembalian.");
+    } finally {
+      setAksiLoadingId(null);
+    }
+  }
+
+  async function handleTolakKembalikan(id: string) {
+    setAksiLoadingId(id);
+    try {
+      await tolakKembalikan(id);
+    } catch (err: any) {
+      alert(err.message ?? "Gagal memperbarui status.");
+    } finally {
+      setAksiLoadingId(null);
+    }
   }
 
   // Kumpulan tombol aksi untuk satu transaksi. Dipakai di tabel (desktop)
   // maupun card (mobile) supaya logikanya cuma ditulis sekali.
   function AksiButtons({ item }: { item: Peminjaman }) {
+    const isBusy = aksiLoadingId === item.id;
+
     if (item.status === "Menunggu Verifikasi") {
       return (
         <>
           <button
-            onClick={() => setujui(item)}
-            className="text-emerald-400 hover:underline text-sm font-medium"
+            onClick={() => handleSetujui(item)}
+            disabled={isBusy}
+            className="text-emerald-400 hover:underline text-sm font-medium disabled:opacity-40"
           >
-            Setujui
+            {isBusy ? "..." : "Setujui"}
           </button>
           <button
             onClick={() => setTolakTarget(item.id)}
-            className="text-rose-400 hover:underline text-sm font-medium"
+            disabled={isBusy}
+            className="text-rose-400 hover:underline text-sm font-medium disabled:opacity-40"
           >
             Tolak
           </button>
@@ -106,14 +183,16 @@ export default function PeminjamanPage() {
       return (
         <>
           <button
-            onClick={() => konfirmasiKembali(item)}
-            className="text-emerald-400 hover:underline text-sm font-medium"
+            onClick={() => handleKonfirmasiKembali(item)}
+            disabled={isBusy}
+            className="text-emerald-400 hover:underline text-sm font-medium disabled:opacity-40"
           >
-            Selesai
+            {isBusy ? "..." : "Selesai"}
           </button>
           <button
-            onClick={() => tolakKembalikan(item.id)}
-            className="text-rose-400 hover:underline text-sm font-medium"
+            onClick={() => handleTolakKembalikan(item.id)}
+            disabled={isBusy}
+            className="text-rose-400 hover:underline text-sm font-medium disabled:opacity-40"
           >
             Belum Kembali
           </button>
@@ -134,16 +213,39 @@ export default function PeminjamanPage() {
           <p className="text-xs text-slate-500 mt-1">{item.alasanTolak}</p>
         )}
         {item.status === "Menunggu Konfirmasi Kembali" && item.fotoBukti && (
-          <a
-            href={item.fotoBukti}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => setPreviewFoto(item.fotoBukti!)}
             className="block text-xs text-violet-400 hover:underline mt-1"
           >
             Lihat foto bukti
-          </a>
+          </button>
         )}
       </>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Peminjaman</h1>
+          <p className="text-sm text-slate-500">Beranda / Peminjaman</p>
+        </div>
+        <p className="text-slate-400 text-sm">Memuat data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Peminjaman</h1>
+          <p className="text-sm text-slate-500">Beranda / Peminjaman</p>
+        </div>
+        <p className="text-rose-400 text-sm">Gagal memuat data: {error}</p>
+      </div>
     );
   }
 
@@ -190,7 +292,7 @@ export default function PeminjamanPage() {
           </thead>
           <tbody>
             {filtered.map((item: Peminjaman) => {
-              const peminjam = findPeminjam(initialPeminjam, item.peminjamId);
+              const peminjam = findPeminjam(peminjamList, item.peminjamId);
               const alat = findAlat(alatList, item.alatId);
               return (
                 <tr key={item.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
@@ -205,7 +307,11 @@ export default function PeminjamanPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-3">
                       <AksiButtons item={item} />
-                      <IconButton label="trash" variant="danger" onClick={() => setHapusTarget(item.id)} />
+                      <IconButton
+                        label="trash"
+                        variant="danger"
+                        onClick={() => setHapusTarget(item.id)}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -219,7 +325,7 @@ export default function PeminjamanPage() {
       {/* ================= CARD: tampil di layar di bawah md (HP) ================= */}
       <div className="md:hidden space-y-3">
         {filtered.map((item: Peminjaman) => {
-          const peminjam = findPeminjam(initialPeminjam, item.peminjamId);
+          const peminjam = findPeminjam(peminjamList, item.peminjamId);
           const alat = findAlat(alatList, item.alatId);
           return (
             <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
@@ -291,13 +397,24 @@ export default function PeminjamanPage() {
               </button>
               <button
                 onClick={submitTolak}
-                disabled={!alasanTolak.trim()}
+                disabled={!alasanTolak.trim() || aksiLoadingId === tolakTarget}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-rose-500 hover:bg-rose-400 disabled:opacity-40 disabled:cursor-not-allowed text-white transition"
               >
-                Tolak Pengajuan
+                {aksiLoadingId === tolakTarget ? "Memproses..." : "Tolak Pengajuan"}
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Preview foto bukti pengembalian */}
+      {previewFoto && (
+        <Modal title="Foto Bukti Pengembalian" onClose={() => setPreviewFoto(null)}>
+          <img
+            src={previewFoto}
+            alt="Foto bukti pengembalian"
+            className="max-h-[70vh] w-full rounded-lg object-contain border border-white/10"
+          />
         </Modal>
       )}
 

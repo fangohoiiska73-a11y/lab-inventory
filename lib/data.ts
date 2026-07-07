@@ -34,21 +34,15 @@ export interface Peminjaman {
   jumlah: number;
   tanggalPinjam: string;
   tanggalKembali: string;
-  // "Menunggu Verifikasi"        = baru diajukan siswa, belum diproses admin.
-  // "Aktif"                      = sudah disetujui admin dan alat sedang dipinjam.
-  // "Ditolak"                    = pengajuan ditolak admin.
-  // "Menunggu Konfirmasi Kembali"= siswa sudah lapor kembalikan alat, admin belum konfirmasi.
-  // "Selesai"                    = alat sudah dikembalikan & dikonfirmasi admin.
-  // "Terlambat"                  = alat aktif tapi sudah lewat tanggal rencana kembali.
-  status:
-    | "Menunggu Verifikasi"
-    | "Aktif"
-    | "Ditolak"
-    | "Menunggu Konfirmasi Kembali"
-    | "Selesai"
-    | "Terlambat";
+  // "Menunggu Verifikasi" = baru diajukan siswa, belum diproses admin.
+  // "Aktif" = sudah disetujui admin dan alat sedang dipinjam.
+  // "Menunggu Konfirmasi Kembali" = siswa sudah lapor mengembalikan, menunggu admin cek & konfirmasi.
+  // "Ditolak" = pengajuan ditolak admin.
+  // "Selesai" = alat sudah dikembalikan dan dikonfirmasi admin.
+  // "Terlambat" = alat aktif tapi sudah lewat tanggal rencana kembali.
+  status: "Menunggu Verifikasi" | "Aktif" | "Menunggu Konfirmasi Kembali" | "Ditolak" | "Selesai" | "Terlambat";
   alasanTolak?: string;
-  fotoBukti?: string; // foto alat yang diupload siswa saat mengajukan pengembalian
+  fotoBukti?: string;
 }
 
 export interface AlatMasuk {

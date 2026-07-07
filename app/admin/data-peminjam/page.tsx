@@ -1,22 +1,61 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/lib/icons";
-import { Peminjam, genId, initialPeminjam } from "@/lib/data";
+import { Peminjam, genId } from "@/lib/data";
+import { supabase } from "@/lib/supabase";
 import { ConfirmDialog, EmptyState, IconButton, Modal, PrimaryButton, SearchInput, Toolbar, inputClass, labelClass } from "@/components/ui";
 
 const EMPTY_FORM: Omit<Peminjam, "id"> = { nama: "", noInduk: "", kelas: "", noHp: "" };
 
+function mapRow(row: any): Peminjam {
+  return {
+    id: row.id,
+    nama: row.nama,
+    noInduk: row.no_induk,
+    kelas: row.kelas,
+    noHp: row.no_hp,
+  };
+}
+
 export default function DataPeminjamPage() {
-  const [peminjam, setPeminjam] = useState<Peminjam[]>(initialPeminjam);
+  const [peminjam, setPeminjam] = useState<Peminjam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Peminjam | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState<Peminjam | null>(null);
 
+  async function loadPeminjam() {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const { data, error } = await supabase.from("peminjam").select("*").order("nama");
+      if (error) throw error;
+      setPeminjam((data ?? []).map(mapRow));
+    } catch (err) {
+      console.error(err);
+      setLoadError("Gagal memuat data peminjam dari database.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPeminjam();
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return peminjam.filter((p) => p.nama.toLowerCase().includes(q) || p.noInduk.toLowerCase().includes(q) || p.kelas.toLowerCase().includes(q));
+    return peminjam.filter(
+      (p) =>
+        p.nama.toLowerCase().includes(q) ||
+        p.noInduk.toLowerCase().includes(q) ||
+        p.kelas.toLowerCase().includes(q)
+    );
   }, [peminjam, query]);
 
   function openAdd() {
@@ -31,28 +70,58 @@ export default function DataPeminjamPage() {
     setModalOpen(true);
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nama.trim() || !form.noInduk.trim()) return;
 
-    if (editing) {
-      setPeminjam((prev) => prev.map((p) => (p.id === editing.id ? { ...editing, ...form } : p)));
-    } else {
-      setPeminjam((prev) => [...prev, { id: genId("P"), ...form }]);
+    setSaving(true);
+    try {
+      if (editing) {
+        const { error } = await supabase
+          .from("peminjam")
+          .update({
+            nama: form.nama,
+            no_induk: form.noInduk,
+            kelas: form.kelas,
+            no_hp: form.noHp,
+          })
+          .eq("id", editing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("peminjam").insert({
+          id: genId("P"),
+          nama: form.nama,
+          no_induk: form.noInduk,
+          kelas: form.kelas,
+          no_hp: form.noHp,
+        });
+        if (error) throw error;
+      }
+      setModalOpen(false);
+      await loadPeminjam();
+    } catch (err: any) {
+      alert("Gagal menyimpan data: " + (err?.message || "terjadi kesalahan"));
+    } finally {
+      setSaving(false);
     }
-    setModalOpen(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteTarget) return;
-    setPeminjam((prev) => prev.filter((p) => p.id !== deleteTarget.id));
-    setDeleteTarget(null);
+    try {
+      const { error } = await supabase.from("peminjam").delete().eq("id", deleteTarget.id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      await loadPeminjam();
+    } catch (err: any) {
+      alert("Gagal menghapus data: " + (err?.message || "terjadi kesalahan"));
+    }
   }
 
   return (
     <>
       <Toolbar
-        subtitle={`${filtered.length} dari ${peminjam.length} peminjam`}
+        subtitle={loading ? "Memuat..." : `${filtered.length} dari ${peminjam.length} peminjam`}
         action={
           <div className="flex items-center gap-3">
             <SearchInput value={query} onChange={setQuery} placeholder="Cari nama, no induk, kelas..." />
@@ -64,7 +133,13 @@ export default function DataPeminjamPage() {
         }
       />
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      {loadError && (
+        <p className="mt-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+          {loadError}
+        </p>
+      )}
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -93,7 +168,7 @@ export default function DataPeminjamPage() {
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && <EmptyState text="Tidak ada peminjam yang cocok dengan pencarian." />}
+          {!loading && filtered.length === 0 && <EmptyState text="Tidak ada peminjam yang cocok dengan pencarian." />}
         </div>
       </div>
 
@@ -102,28 +177,56 @@ export default function DataPeminjamPage() {
           <form onSubmit={handleSave} className="space-y-4">
             <div>
               <label className={labelClass}>Nama Lengkap</label>
-              <input className={inputClass} value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Ahmad Fauzan" required />
+              <input
+                className={inputClass}
+                value={form.nama}
+                onChange={(e) => setForm({ ...form, nama: e.target.value })}
+                placeholder="Ahmad Fauzan"
+                required
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>No Induk / NIM</label>
-                <input className={inputClass} value={form.noInduk} onChange={(e) => setForm({ ...form, noInduk: e.target.value })} placeholder="2024101" required />
+                <input
+                  className={inputClass}
+                  value={form.noInduk}
+                  onChange={(e) => setForm({ ...form, noInduk: e.target.value })}
+                  placeholder="2024101"
+                  required
+                />
               </div>
               <div>
                 <label className={labelClass}>Kelas / Jurusan</label>
-                <input className={inputClass} value={form.kelas} onChange={(e) => setForm({ ...form, kelas: e.target.value })} placeholder="XI TJKT 1" />
+                <input
+                  className={inputClass}
+                  value={form.kelas}
+                  onChange={(e) => setForm({ ...form, kelas: e.target.value })}
+                  placeholder="XI TJKT 1"
+                />
               </div>
             </div>
             <div>
               <label className={labelClass}>No HP</label>
-              <input className={inputClass} value={form.noHp} onChange={(e) => setForm({ ...form, noHp: e.target.value })} placeholder="0812xxxxxxx" />
+              <input
+                className={inputClass}
+                value={form.noHp}
+                onChange={(e) => setForm({ ...form, noHp: e.target.value })}
+                placeholder="0812xxxxxxx"
+              />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 transition">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 transition"
+              >
                 Batal
               </button>
-              <PrimaryButton type="submit">{editing ? "Simpan Perubahan" : "Tambah Peminjam"}</PrimaryButton>
+              <PrimaryButton type="submit">
+                {saving ? "Menyimpan..." : editing ? "Simpan Perubahan" : "Tambah Peminjam"}
+              </PrimaryButton>
             </div>
           </form>
         </Modal>

@@ -1,7 +1,9 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/lib/icons";
-import { Alat, KATEGORI_ALAT, genId, initialAlat } from "@/lib/data";
+import { Alat, KATEGORI_ALAT, genId } from "@/lib/data";
+import { supabase } from "@/lib/supabase";
+import { fetchAlatList } from "@/lib/queries";
 import { Badge, ConfirmDialog, EmptyState, IconButton, Modal, PrimaryButton, SearchInput, Toolbar, inputClass, labelClass } from "@/components/ui";
 
 const EMPTY_FORM: Omit<Alat, "id"> = {
@@ -19,7 +21,11 @@ const EMPTY_FORM: Omit<Alat, "id"> = {
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 export default function DataAlatPage() {
-  const [alat, setAlat] = useState<Alat[]>(initialAlat);
+  const [alat, setAlat] = useState<Alat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Alat | null>(null);
@@ -28,9 +34,32 @@ export default function DataAlatPage() {
   const [imgError, setImgError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  async function loadAlat() {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const list = await fetchAlatList();
+      setAlat(list);
+    } catch (err) {
+      console.error(err);
+      setLoadError("Gagal memuat data alat dari database.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAlat();
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return alat.filter((a) => a.nama.toLowerCase().includes(q) || a.kode.toLowerCase().includes(q) || a.kategori.toLowerCase().includes(q));
+    return alat.filter(
+      (a) =>
+        a.nama.toLowerCase().includes(q) ||
+        a.kode.toLowerCase().includes(q) ||
+        a.kategori.toLowerCase().includes(q)
+    );
   }, [alat, query]);
 
   function openAdd() {
@@ -82,28 +111,59 @@ export default function DataAlatPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nama.trim() || !form.kode.trim()) return;
 
-    if (editing) {
-      setAlat((prev) => prev.map((a) => (a.id === editing.id ? { ...editing, ...form } : a)));
-    } else {
-      setAlat((prev) => [...prev, { id: genId("A"), ...form }]);
+    setSaving(true);
+    try {
+      if (editing) {
+        const { error } = await supabase
+          .from("alat")
+          .update({
+            kode: form.kode,
+            nama: form.nama,
+            kategori: form.kategori,
+            jumlah: form.jumlah,
+            tersedia: form.tersedia,
+            kondisi: form.kondisi,
+            lokasi: form.lokasi,
+            gambar: form.gambar,
+          })
+          .eq("id", editing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("alat").insert({
+          id: genId("A"),
+          ...form,
+        });
+        if (error) throw error;
+      }
+      setModalOpen(false);
+      await loadAlat();
+    } catch (err: any) {
+      alert("Gagal menyimpan data: " + (err?.message || "terjadi kesalahan"));
+    } finally {
+      setSaving(false);
     }
-    setModalOpen(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteTarget) return;
-    setAlat((prev) => prev.filter((a) => a.id !== deleteTarget.id));
-    setDeleteTarget(null);
+    try {
+      const { error } = await supabase.from("alat").delete().eq("id", deleteTarget.id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      await loadAlat();
+    } catch (err: any) {
+      alert("Gagal menghapus data: " + (err?.message || "terjadi kesalahan"));
+    }
   }
 
   return (
     <>
       <Toolbar
-        subtitle={`${filtered.length} dari ${alat.length} alat`}
+        subtitle={loading ? "Memuat..." : `${filtered.length} dari ${alat.length} alat`}
         action={
           <div className="flex items-center gap-3">
             <SearchInput value={query} onChange={setQuery} placeholder="Cari nama, kode, kategori..." />
@@ -115,7 +175,13 @@ export default function DataAlatPage() {
         }
       />
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      {loadError && (
+        <p className="mt-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+          {loadError}
+        </p>
+      )}
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -166,14 +232,13 @@ export default function DataAlatPage() {
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && <EmptyState text="Tidak ada alat yang cocok dengan pencarian." />}
+          {!loading && filtered.length === 0 && <EmptyState text="Tidak ada alat yang cocok dengan pencarian." />}
         </div>
       </div>
 
       {modalOpen && (
         <Modal title={editing ? "Edit Alat" : "Tambah Alat"} onClose={() => setModalOpen(false)}>
           <form onSubmit={handleSave} className="space-y-4">
-
             {/* UPLOAD GAMBAR */}
             <div>
               <label className={labelClass}>Gambar Alat</label>
@@ -220,13 +285,25 @@ export default function DataAlatPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Kode Alat</label>
-                <input className={inputClass} value={form.kode} onChange={(e) => setForm({ ...form, kode: e.target.value })} placeholder="JRK-001" required />
+                <input
+                  className={inputClass}
+                  value={form.kode}
+                  onChange={(e) => setForm({ ...form, kode: e.target.value })}
+                  placeholder="JRK-001"
+                  required
+                />
               </div>
               <div>
                 <label className={labelClass}>Kategori</label>
-                <select className={inputClass} value={form.kategori} onChange={(e) => setForm({ ...form, kategori: e.target.value })}>
+                <select
+                  className={inputClass}
+                  value={form.kategori}
+                  onChange={(e) => setForm({ ...form, kategori: e.target.value })}
+                >
                   {KATEGORI_ALAT.map((k) => (
-                    <option key={k} value={k}>{k}</option>
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -234,24 +311,46 @@ export default function DataAlatPage() {
 
             <div>
               <label className={labelClass}>Nama Alat</label>
-              <input className={inputClass} value={form.nama} onChange={(e) => setForm({ ...form, nama: e.target.value })} placeholder="Router Mikrotik RB941" required />
+              <input
+                className={inputClass}
+                value={form.nama}
+                onChange={(e) => setForm({ ...form, nama: e.target.value })}
+                placeholder="Router Mikrotik RB941"
+                required
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Jumlah Total</label>
-                <input type="number" min={0} className={inputClass} value={form.jumlah} onChange={(e) => setForm({ ...form, jumlah: Number(e.target.value) })} />
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={form.jumlah}
+                  onChange={(e) => setForm({ ...form, jumlah: Number(e.target.value) })}
+                />
               </div>
               <div>
                 <label className={labelClass}>Jumlah Tersedia</label>
-                <input type="number" min={0} className={inputClass} value={form.tersedia} onChange={(e) => setForm({ ...form, tersedia: Number(e.target.value) })} />
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={form.tersedia}
+                  onChange={(e) => setForm({ ...form, tersedia: Number(e.target.value) })}
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Kondisi</label>
-                <select className={inputClass} value={form.kondisi} onChange={(e) => setForm({ ...form, kondisi: e.target.value as Alat["kondisi"] })}>
+                <select
+                  className={inputClass}
+                  value={form.kondisi}
+                  onChange={(e) => setForm({ ...form, kondisi: e.target.value as Alat["kondisi"] })}
+                >
                   <option>Baik</option>
                   <option>Rusak Ringan</option>
                   <option>Rusak Berat</option>
@@ -259,15 +358,26 @@ export default function DataAlatPage() {
               </div>
               <div>
                 <label className={labelClass}>Lokasi</label>
-                <input className={inputClass} value={form.lokasi} onChange={(e) => setForm({ ...form, lokasi: e.target.value })} placeholder="Rak A1" />
+                <input
+                  className={inputClass}
+                  value={form.lokasi}
+                  onChange={(e) => setForm({ ...form, lokasi: e.target.value })}
+                  placeholder="Rak A1"
+                />
               </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 transition">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 transition"
+              >
                 Batal
               </button>
-              <PrimaryButton type="submit">{editing ? "Simpan Perubahan" : "Tambah Alat"}</PrimaryButton>
+              <PrimaryButton type="submit">
+                {saving ? "Menyimpan..." : editing ? "Simpan Perubahan" : "Tambah Alat"}
+              </PrimaryButton>
             </div>
           </form>
         </Modal>

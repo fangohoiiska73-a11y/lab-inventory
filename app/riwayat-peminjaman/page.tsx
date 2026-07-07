@@ -1,75 +1,25 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Navbar from "@/components/home/Navbar";
 import Sidebar from "@/components/dashboard/Sidebar";
+import { Peminjaman } from "@/lib/data";
+import { fetchAlatList, fetchAllPeminjaman } from "@/lib/queries";
 
-/* ------------------------------ Dummy data -------------------------------- */
-// TODO: ganti dengan data asli dari Supabase (tabel peminjaman, difilter berdasarkan user login).
-
-type Status = "Menunggu Verifikasi" | "Disetujui" | "Dikembalikan" | "Terlambat";
-
-interface Riwayat {
-  id: string;
-  alat: string;
-  jumlah: number;
-  tanggalPinjam: string;
-  tanggalKembali: string;
-  status: Status;
-}
-
-const DATA_RIWAYAT: Riwayat[] = [
-  {
-    id: "PJM-0005",
-    alat: "Router Mikrotik RB941",
-    jumlah: 1,
-    tanggalPinjam: "04 Jul 2026",
-    tanggalKembali: "11 Jul 2026",
-    status: "Menunggu Verifikasi",
-  },
-  {
-    id: "PJM-0004",
-    alat: "Switch TP-Link 8 Port",
-    jumlah: 2,
-    tanggalPinjam: "01 Jul 2026",
-    tanggalKembali: "05 Jul 2026",
-    status: "Disetujui",
-  },
-  {
-    id: "PJM-0003",
-    alat: "Tang Crimping",
-    jumlah: 1,
-    tanggalPinjam: "20 Jun 2026",
-    tanggalKembali: "22 Jun 2026",
-    status: "Dikembalikan",
-  },
-  {
-    id: "PJM-0002",
-    alat: "Kabel LAN Cat6 (roll)",
-    jumlah: 1,
-    tanggalPinjam: "10 Jun 2026",
-    tanggalKembali: "12 Jun 2026",
-    status: "Terlambat",
-  },
-  {
-    id: "PJM-0001",
-    alat: "Laptop Praktikum",
-    jumlah: 1,
-    tanggalPinjam: "02 Jun 2026",
-    tanggalKembali: "04 Jun 2026",
-    status: "Dikembalikan",
-  },
-];
-
-const STATUS_STYLE: Record<Status, string> = {
+const STATUS_STYLE: Record<string, string> = {
   "Menunggu Verifikasi": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  Disetujui: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  Dikembalikan: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Aktif: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  Selesai: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   Terlambat: "bg-red-500/10 text-red-400 border-red-500/20",
+  Ditolak: "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 
-function StatusBadge({ status }: { status: Status }) {
+function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status]}`}>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+        STATUS_STYLE[status] || "bg-white/5 text-slate-300 border-white/10"
+      }`}
+    >
       {status}
     </span>
   );
@@ -78,19 +28,47 @@ function StatusBadge({ status }: { status: Status }) {
 const TABS = ["Semua", "Aktif", "Selesai"] as const;
 type Tab = (typeof TABS)[number];
 
-function filterByTab(data: Riwayat[], tab: Tab) {
+function filterByTab(data: Peminjaman[], tab: Tab) {
   if (tab === "Aktif") {
-    return data.filter((r) => r.status === "Menunggu Verifikasi" || r.status === "Disetujui" || r.status === "Terlambat");
+    return data.filter(
+      (r) => r.status === "Menunggu Verifikasi" || r.status === "Aktif" || r.status === "Terlambat"
+    );
   }
   if (tab === "Selesai") {
-    return data.filter((r) => r.status === "Dikembalikan");
+    return data.filter((r) => r.status === "Selesai" || r.status === "Ditolak");
   }
   return data;
 }
 
+function formatTanggal(iso: string) {
+  if (!iso) return "-";
+  const [y, m, d] = iso.split("-");
+  const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  return `${d} ${bulan[Number(m) - 1]} ${y}`;
+}
+
 export default function RiwayatPeminjamanPage() {
   const [tab, setTab] = useState<Tab>("Semua");
-  const data = filterByTab(DATA_RIWAYAT, tab);
+  const [peminjaman, setPeminjaman] = useState<Peminjaman[]>([]);
+  const [alatNamaMap, setAlatNamaMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    Promise.all([fetchAllPeminjaman(), fetchAlatList()])
+      .then(([peminjamanList, alatList]) => {
+        setPeminjaman(peminjamanList);
+        const map: Record<string, string> = {};
+        alatList.forEach((a) => {
+          map[a.id] = a.nama;
+        });
+        setAlatNamaMap(map);
+      })
+      .catch(() => setLoadError("Gagal memuat data riwayat peminjaman. Coba muat ulang halaman."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const data = useMemo(() => filterByTab(peminjaman, tab), [peminjaman, tab]);
 
   return (
     <main className="min-h-screen bg-[#05070f] text-white">
@@ -104,7 +82,7 @@ export default function RiwayatPeminjamanPage() {
               RIWAYAT <span className="text-emerald-400">PEMINJAMAN</span>
             </h1>
             <p className="mt-1.5 text-sm text-slate-400">
-              Daftar seluruh pengajuan peminjaman alat laboratorium yang pernah kamu buat.
+              Daftar seluruh pengajuan peminjaman alat laboratorium yang tercatat.
             </p>
           </div>
 
@@ -124,7 +102,17 @@ export default function RiwayatPeminjamanPage() {
             ))}
           </div>
 
-          {data.length === 0 ? (
+          {loadError && (
+            <p className="mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+              {loadError}
+            </p>
+          )}
+
+          {loading ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
+              <p className="text-sm text-slate-400">Memuat data...</p>
+            </div>
+          ) : data.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
               <p className="text-sm text-slate-400">Belum ada riwayat peminjaman pada kategori ini.</p>
             </div>
@@ -146,10 +134,10 @@ export default function RiwayatPeminjamanPage() {
                   {data.map((r) => (
                     <tr key={r.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition">
                       <td className="px-5 py-4 text-slate-500">{r.id}</td>
-                      <td className="px-5 py-4 font-medium">{r.alat}</td>
+                      <td className="px-5 py-4 font-medium">{alatNamaMap[r.alatId] || "-"}</td>
                       <td className="px-5 py-4 text-slate-300">{r.jumlah}</td>
-                      <td className="px-5 py-4 text-slate-300">{r.tanggalPinjam}</td>
-                      <td className="px-5 py-4 text-slate-300">{r.tanggalKembali}</td>
+                      <td className="px-5 py-4 text-slate-300">{formatTanggal(r.tanggalPinjam)}</td>
+                      <td className="px-5 py-4 text-slate-300">{formatTanggal(r.tanggalKembali)}</td>
                       <td className="px-5 py-4">
                         <StatusBadge status={r.status} />
                       </td>
@@ -163,13 +151,13 @@ export default function RiwayatPeminjamanPage() {
                 {data.map((r) => (
                   <div key={r.id} className="p-4">
                     <div className="flex items-center justify-between gap-3 mb-2">
-                      <p className="font-medium text-sm">{r.alat}</p>
+                      <p className="font-medium text-sm">{alatNamaMap[r.alatId] || "-"}</p>
                       <StatusBadge status={r.status} />
                     </div>
                     <p className="text-xs text-slate-500">{r.id}</p>
                     <div className="mt-2 flex justify-between text-xs text-slate-400">
-                      <span>Pinjam: {r.tanggalPinjam}</span>
-                      <span>Kembali: {r.tanggalKembali}</span>
+                      <span>Pinjam: {formatTanggal(r.tanggalPinjam)}</span>
+                      <span>Kembali: {formatTanggal(r.tanggalKembali)}</span>
                     </div>
                   </div>
                 ))}

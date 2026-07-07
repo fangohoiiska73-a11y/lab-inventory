@@ -1,9 +1,10 @@
 "use client";
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/home/Navbar";
 import Sidebar from "@/components/dashboard/Sidebar";
-import { initialAlat } from "@/lib/data";
+import { Alat, todayISO } from "@/lib/data";
+import { createPeminjaman, fetchAlatList } from "@/lib/queries";
 
 interface FormState {
   nama: string;
@@ -18,16 +19,12 @@ interface FormState {
   fotoBukti: string;
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 const EMPTY_FORM: FormState = {
   nama: "",
   noInduk: "",
   kelas: "",
   noHp: "",
-  alatId: initialAlat[0]?.id || "",
+  alatId: "",
   jumlah: 1,
   tanggalPinjam: todayISO(),
   tanggalKembali: "",
@@ -129,13 +126,7 @@ function UploadFotoBukti({
         </span>
         <span className="text-xs text-slate-500">JPG, PNG, maks. 5MB</span>
       </label>
-      <input
-        id="foto-bukti-input"
-        type="file"
-        accept="image/*"
-        onChange={handleFile}
-        className="hidden"
-      />
+      <input id="foto-bukti-input" type="file" accept="image/*" onChange={handleFile} className="hidden" />
       {errorFile && <p className="mt-2 text-xs text-red-400">{errorFile}</p>}
     </div>
   );
@@ -144,16 +135,31 @@ function UploadFotoBukti({
 /* ------------------------------- Page --------------------------------- */
 
 export default function AjukanPeminjamanPage() {
+  const [alatList, setAlatList] = useState<Alat[]>([]);
+  const [loadingAlat, setLoadingAlat] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [sukses, setSukses] = useState<FormState | null>(null);
 
+  useEffect(() => {
+    fetchAlatList()
+      .then((list) => {
+        setAlatList(list);
+        setForm((f) => ({ ...f, alatId: f.alatId || list[0]?.id || "" }));
+      })
+      .catch(() => setLoadError("Gagal memuat daftar alat. Coba muat ulang halaman."))
+      .finally(() => setLoadingAlat(false));
+  }, []);
+
   const alatTerpilih = useMemo(
-    () => initialAlat.find((a) => a.id === form.alatId),
-    [form.alatId]
+    () => alatList.find((a) => a.id === form.alatId),
+    [alatList, form.alatId]
   );
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
 
@@ -186,14 +192,31 @@ export default function AjukanPeminjamanPage() {
       return;
     }
 
-    // TODO: sambungkan ke backend/API supaya pengajuan (termasuk fotoBukti)
-    // benar-benar tersimpan dan muncul di halaman admin > Peminjaman untuk diverifikasi.
-    setSukses(form);
+    setSubmitting(true);
+    try {
+      await createPeminjaman({
+        nama: form.nama,
+        noInduk: form.noInduk,
+        kelas: form.kelas,
+        noHp: form.noHp,
+        alatId: form.alatId,
+        jumlah: form.jumlah,
+        tanggalPinjam: form.tanggalPinjam,
+        tanggalKembali: form.tanggalKembali,
+        fotoBukti: form.fotoBukti,
+      });
+      setSukses(form);
+    } catch (err) {
+      console.error(err);
+      setError("Gagal mengirim pengajuan. Coba lagi beberapa saat.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleAjukanLagi() {
     setSukses(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, alatId: alatList[0]?.id || "" });
     setError("");
   }
 
@@ -214,7 +237,7 @@ export default function AjukanPeminjamanPage() {
               </div>
               <h2 className="mt-4 text-xl font-semibold">Pengajuan Berhasil Dikirim</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Pengajuan kamu akan diverifikasi oleh admin (termasuk foto bukti). Simpan ringkasan ini sebagai bukti.
+                Pengajuan kamu tersimpan dan akan diverifikasi oleh admin. Simpan ringkasan ini sebagai bukti.
               </p>
 
               {sukses.fotoBukti && (
@@ -244,10 +267,10 @@ export default function AjukanPeminjamanPage() {
                   Ajukan Peminjaman Lain
                 </button>
                 <Link
-                  href="/pengembalian"
+                  href="/riwayat-peminjaman"
                   className="rounded-lg border border-white/10 hover:bg-white/5 transition px-5 py-2.5 text-sm font-medium text-slate-300"
                 >
-                  Isi Form Pengembalian
+                  Lihat Riwayat Peminjaman
                 </Link>
               </div>
             </div>
@@ -269,6 +292,12 @@ export default function AjukanPeminjamanPage() {
                   Lengkapi detail peminjaman alat laboratorium TJKT dengan benar.
                 </p>
               </div>
+
+              {loadError && (
+                <p className="mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3.5 py-2.5">
+                  {loadError}
+                </p>
+              )}
 
               <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-7">
@@ -296,6 +325,9 @@ export default function AjukanPeminjamanPage() {
                           placeholder="2024101"
                           required
                         />
+                        <p className={hintClass}>
+                          Kalau No Induk sudah pernah dipakai, data namamu akan otomatis dikenali.
+                        </p>
                       </div>
                       <div>
                         <label className={labelClass}>Kelas / Jurusan</label>
@@ -326,19 +358,23 @@ export default function AjukanPeminjamanPage() {
                   <div className="space-y-4">
                     <div>
                       <label className={labelClass}>Pilih Alat</label>
-                      <select
-                        className={inputClass}
-                        value={form.alatId}
-                        onChange={(e) => setForm({ ...form, alatId: e.target.value, jumlah: 1 })}
-                      >
-                        {initialAlat.map((a) => (
-                          <option key={a.id} value={a.id} disabled={a.tersedia <= 0}>
-                            {a.nama} — {a.kategori} (tersedia: {a.tersedia}
-                            {a.tersedia <= 0 ? ", habis" : ""})
-                          </option>
-                        ))}
-                      </select>
-                      <p className={hintClass}>Pilih alat yang ingin dipinjam dan daftar tersedia.</p>
+                      {loadingAlat ? (
+                        <p className="text-sm text-slate-500">Memuat daftar alat...</p>
+                      ) : (
+                        <select
+                          className={inputClass}
+                          value={form.alatId}
+                          onChange={(e) => setForm({ ...form, alatId: e.target.value, jumlah: 1 })}
+                        >
+                          {alatList.map((a) => (
+                            <option key={a.id} value={a.id} disabled={a.tersedia <= 0}>
+                              {a.nama} — {a.kategori} (tersedia: {a.tersedia}
+                              {a.tersedia <= 0 ? ", habis" : ""})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <p className={hintClass}>Pilih alat yang ingin dipinjam dari daftar tersedia.</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -419,16 +455,17 @@ export default function AjukanPeminjamanPage() {
                 <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
                   <button
                     type="button"
-                    onClick={() => setForm(EMPTY_FORM)}
+                    onClick={() => setForm({ ...EMPTY_FORM, alatId: alatList[0]?.id || "" })}
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition px-5 py-2.5 text-sm font-medium text-slate-300"
                   >
                     <span aria-hidden>✕</span> Batal
                   </button>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 transition px-5 py-2.5 text-sm font-semibold shadow-lg shadow-emerald-500/15"
+                    disabled={submitting || loadingAlat}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 transition px-5 py-2.5 text-sm font-semibold shadow-lg shadow-emerald-500/15 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span aria-hidden>➤</span> Simpan &amp; Lanjutkan
+                    <span aria-hidden>➤</span> {submitting ? "Mengirim..." : "Simpan & Lanjutkan"}
                   </button>
                 </div>
               </form>
